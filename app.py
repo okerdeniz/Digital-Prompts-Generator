@@ -10,6 +10,7 @@ import json
 import zipfile
 import io
 import re
+import os
 from datetime import datetime
 from pathlib import Path
 from docx import Document
@@ -293,12 +294,11 @@ with st.sidebar:
                 st.rerun()
 
             st.markdown("**Add a new domain:**")
-            new_dom_col, add_col = st.columns([3, 1])
-            new_domain = new_dom_col.text_input(
+            new_domain = st.text_input(
                 "Domain", placeholder="@partner.com",
                 key="new_domain_input", label_visibility="collapsed"
             )
-            if add_col.button("Add", key="add_domain_btn"):
+            if st.button("➕ Add Domain", key="add_domain_btn", use_container_width=True):
                 nd = new_domain.strip().lower()
                 if nd and not nd.startswith("@"):
                     nd = "@" + nd
@@ -332,25 +332,47 @@ with st.sidebar:
     )
 
     # ── API Key ──────────────────────────────────────────────────────────────
-    _key_hints = {
-        "Claude AI":      ("sk-ant-...",               "Make sure to add a valid API key for this agent."),
-        "ChatGPT":        ("sk-proj-...",               "Make sure to add a valid API key for this agent."),
-        "Gemini":         ("AIza...",                   "Make sure to add a valid API key for this agent."),
-        "GitHub Copilot": ("ghp_... or github_pat_...", "Make sure to add a valid API key for this agent."),
+    # SSA users: keys loaded silently from .env — no input needed
+    # Non-SSA users: must enter their own key
+    _env_keys = {
+        "Claude AI":      os.getenv("SSA_CLAUDE_API_KEY", ""),
+        "ChatGPT":        os.getenv("SSA_OPENAI_API_KEY", ""),
+        "Gemini":         os.getenv("SSA_GEMINI_API_KEY", ""),
+        "GitHub Copilot": os.getenv("SSA_COPILOT_API_KEY", ""),
     }
+    _key_hints = {
+        "Claude AI":      ("sk-ant-...",               "Get yours at console.anthropic.com"),
+        "ChatGPT":        ("sk-proj-...",               "Get yours at platform.openai.com"),
+        "Gemini":         ("AIza...",                   "Get yours at aistudio.google.com"),
+        "GitHub Copilot": ("ghp_... or github_pat_...", "GitHub → Settings → Developer Settings → Personal Access Tokens"),
+    }
+
+    _is_ssa = is_ssa_admin(user_email)
+    _preset  = _env_keys.get(ai_agent, "") if _is_ssa else ""
+
     st.markdown("### 🔑 API Key")
-    _hint = _key_hints.get(ai_agent, ("Your API key", ""))
-    api_key = st.text_input(
-        "Enter your API Key",
-        type="password",
-        placeholder=_hint[0],
-        help=f"Required to call {ai_agent}. {_hint[1]}. Keys are never stored.",
-        key="api_key_input"
-    )
-    if _hint[1]:
-        st.caption(f"🔒 Never saved. 💡 {_hint[1]}")
+    if _is_ssa and _preset:
+        # SSA user with a preset key — hide the field, show a confirmation badge
+        api_key = _preset
+        st.markdown(
+            "<div style='background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;"
+            "padding:0.5rem 0.9rem;font-size:0.85rem;color:#2e7d32;'>"
+            "🔑 &nbsp;<strong>API key pre-configured</strong> for SSA &amp; Company users.</div>",
+            unsafe_allow_html=True
+        )
     else:
-        st.caption("🔒 Used only for this session and never saved.")
+        _hint = _key_hints.get(ai_agent, ("Your API key", ""))
+        api_key = st.text_input(
+            "Enter your API Key",
+            type="password",
+            placeholder=_hint[0],
+            help=f"Required to call {ai_agent}. {_hint[1]}. Keys are never stored.",
+            key="api_key_input"
+        )
+        if _hint[1]:
+            st.caption(f"🔒 Never saved. &nbsp; 💡 {_hint[1]}")
+        else:
+            st.caption("🔒 Used only for this session and never saved.")
 
     st.markdown("---")
 
