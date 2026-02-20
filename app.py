@@ -409,7 +409,7 @@ with st.sidebar:
 
     if prompt_type in ["Friday Fun Prompts Only", "Both"]:
         num_friday = st.slider(
-            "Number of Friday Prompts",
+            "Number of Friday Fun Prompts",
             min_value=1, max_value=5, value=1
         )
 
@@ -1136,10 +1136,13 @@ if st.session_state.get('generated_prompts'):
                 for lbl, key in [
                     ("💡 AI Prompt",      "ai_prompt"),
                     ("📧 E-Mail Message",  "email_message"),
-                    ("🤖 Test Response",   "test_response")
                 ]:
                     st.markdown(f'<div class="field-label">{lbl}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="field-value">{fmt(prompt.get(key, ""))}</div>', unsafe_allow_html=True)
+
+                # Test Response — native st.markdown preserves AI formatting exactly
+                st.markdown('<div class="field-label">🤖 Test Response</div>', unsafe_allow_html=True)
+                st.markdown(prompt.get("test_response", ""))
 
             with cr:
                 for lbl, key in [
