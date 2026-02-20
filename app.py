@@ -341,10 +341,10 @@ with st.sidebar:
         "GitHub Copilot": os.getenv("SSA_COPILOT_API_KEY", ""),
     }
     _key_hints = {
-        "Claude AI":      ("sk-ant-...",               "Get yours at console.anthropic.com"),
-        "ChatGPT":        ("sk-proj-...",               "Get yours at platform.openai.com"),
-        "Gemini":         ("AIza...",                   "Get yours at aistudio.google.com"),
-        "GitHub Copilot": ("ghp_... or github_pat_...", "GitHub → Settings → Developer Settings → Personal Access Tokens"),
+        "Claude AI":      ("sk-ant-...",               "Make sure to provide a valid API key for this agent."),
+        "ChatGPT":        ("sk-proj-...",               "Make sure to provide a valid API key for this agent."),
+        "Gemini":         ("AIza...",                   "Make sure to provide a valid API key for this agent."),
+        "GitHub Copilot": ("ghp_... or github_pat_...", "Make sure to provide a valid API key for this agent."),
     }
 
     _is_ssa = is_ssa_admin(user_email)
@@ -419,7 +419,7 @@ with st.sidebar:
     st.markdown("### 🎯 Topic Instructions")
     topic_instructions = st.text_area(
         "Custom Instructions / Topic Areas",
-        placeholder="e.g., Focus on key AI learning principles, importance of data security, and other similar areas of interest. Target audience: finance team.",
+        placeholder="e.g., Focus on key AI learning principles, importance of data security, and other areas of interest. Use short prompts. Target audience: finance team.",
         height=150,
         help="Optional: guide the topics and skill/focus area of generated prompts."
     )
@@ -468,7 +468,7 @@ def call_ai_agent(user_message: str, system_message: str, agent: str, key: str) 
         client = anthropic.Anthropic(api_key=clean_key)
         resp = client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=8000,
+            max_tokens=16000,
             system=system_message,
             messages=[{"role": "user", "content": user_message}]
         )
@@ -488,7 +488,7 @@ def call_ai_agent(user_message: str, system_message: str, agent: str, key: str) 
                 {"role": "system", "content": system_message},
                 {"role": "user",   "content": user_message}
             ],
-            max_tokens=8000,
+            max_tokens=16000,
         )
         raw = resp.choices[0].message.content.strip()
 
@@ -524,7 +524,7 @@ def call_ai_agent(user_message: str, system_message: str, agent: str, key: str) 
                 {"role": "system", "content": system_message},
                 {"role": "user",   "content": user_message}
             ],
-            max_tokens=8000,
+            max_tokens=16000,
         )
         raw = resp.choices[0].message.content.strip()
 
@@ -985,45 +985,63 @@ if st.button("🚀 Generate Prompts", disabled=(total == 0)):
     bar    = st.progress(0)
     status = st.empty()
 
+    BATCH_SIZE = 3  # max prompts per API call — prevents JSON truncation from token limits
+
     if num_daily > 0:
-        status.markdown(
-            f'<div class="status-bar">⏳ Generating {num_daily} Daily Prompts with {ai_agent} for {industry}...</div>',
-            unsafe_allow_html=True
-        )
-        try:
-            result = call_ai_agent(
-                user_message=build_daily_request(num_daily, 1, topic_instructions, difficulty, ai_agent, industry),
-                system_message=build_system_prompt(ai_agent, industry),
-                agent=ai_agent,
-                key=api_key
+        daily_batches = [BATCH_SIZE] * (num_daily // BATCH_SIZE)
+        if num_daily % BATCH_SIZE:
+            daily_batches.append(num_daily % BATCH_SIZE)
+        daily_start = 1
+        for b_idx, batch_size in enumerate(daily_batches):
+            status.markdown(
+                f'<div class="status-bar">⏳ Generating Daily Prompts ' +
+                f'{daily_start}–{daily_start + batch_size - 1} of {num_daily} with {ai_agent} for {industry}...</div>',
+                unsafe_allow_html=True
             )
-            if isinstance(result, list):
-                all_prompts.extend(result)
-                all_friday.extend([False] * len(result))
-            bar.progress(0.5 if num_friday > 0 else 1.0)
-        except Exception as e:
-            st.error(f"Error generating daily prompts: {e}")
-            st.stop()
+            try:
+                result = call_ai_agent(
+                    user_message=build_daily_request(batch_size, daily_start, topic_instructions, difficulty, ai_agent, industry),
+                    system_message=build_system_prompt(ai_agent, industry),
+                    agent=ai_agent,
+                    key=api_key
+                )
+                if isinstance(result, list):
+                    all_prompts.extend(result)
+                    all_friday.extend([False] * len(result))
+                daily_start += batch_size
+                daily_progress = (b_idx + 1) / len(daily_batches)
+                bar.progress(daily_progress * (0.5 if num_friday > 0 else 1.0))
+            except Exception as e:
+                st.error(f"Error generating daily prompts (batch {b_idx + 1}): {e}")
+                st.stop()
 
     if num_friday > 0:
-        status.markdown(
-            f'<div class="status-bar">⏳ Generating {num_friday} Friday Fun Prompts with {ai_agent} for {industry}...</div>',
-            unsafe_allow_html=True
-        )
-        try:
-            result = call_ai_agent(
-                user_message=build_friday_request(num_friday, 1, topic_instructions, difficulty, ai_agent, industry),
-                system_message=build_system_prompt(ai_agent, industry),
-                agent=ai_agent,
-                key=api_key
+        friday_batches = [BATCH_SIZE] * (num_friday // BATCH_SIZE)
+        if num_friday % BATCH_SIZE:
+            friday_batches.append(num_friday % BATCH_SIZE)
+        friday_start = 1
+        for b_idx, batch_size in enumerate(friday_batches):
+            status.markdown(
+                f'<div class="status-bar">⏳ Generating Friday Prompts ' +
+                f'{friday_start}–{friday_start + batch_size - 1} of {num_friday} with {ai_agent} for {industry}...</div>',
+                unsafe_allow_html=True
             )
-            if isinstance(result, list):
-                all_prompts.extend(result)
-                all_friday.extend([True] * len(result))
-            bar.progress(1.0)
-        except Exception as e:
-            st.error(f"Error generating Friday prompts: {e}")
-            st.stop()
+            try:
+                result = call_ai_agent(
+                    user_message=build_friday_request(batch_size, friday_start, topic_instructions, difficulty, ai_agent, industry),
+                    system_message=build_system_prompt(ai_agent, industry),
+                    agent=ai_agent,
+                    key=api_key
+                )
+                if isinstance(result, list):
+                    all_prompts.extend(result)
+                    all_friday.extend([True] * len(result))
+                friday_start += batch_size
+                friday_progress = 0.5 + ((b_idx + 1) / len(friday_batches)) * 0.5
+                bar.progress(friday_progress)
+            except Exception as e:
+                st.error(f"Error generating Friday prompts (batch {b_idx + 1}): {e}")
+                st.stop()
 
     status.markdown(
         f'<div class="status-bar">✅ Generated {len(all_prompts)} prompt(s) with {ai_agent} for {industry}!</div>',
